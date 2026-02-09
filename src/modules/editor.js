@@ -808,18 +808,20 @@ export const moduloEditor = {
         let dataURL;
         const nombreBase = nombreArchivo.replace(/\.[^/.]+$/, '');
 
-        // Usar imagen de IA como base si existe, sino la original
-        const imagenBase = imagenBaseIA || imagenOriginal;
+        if (canvasResultadoIA) {
+            // Descargar el resultado de IA directamente sin re-procesar
+            dataURL = canvasResultadoIA.toDataURL('image/jpeg', 0.95);
+        } else {
+            // Procesar en alta calidad con la configuración actual
+            const resultado = imageProcessor.procesar(imagenOriginal, {
+                ...configActual,
+                formato: 'image/jpeg',
+                calidad: 0.95
+            });
+            dataURL = resultado.canvas.toDataURL('image/jpeg', 0.95);
+        }
 
-        // Procesar en alta calidad con la configuración actual
-        const resultado = imageProcessor.procesar(imagenBase, {
-            ...configActual,
-            formato: 'image/jpeg',
-            calidad: 0.95
-        });
-        dataURL = resultado.canvas.toDataURL('image/jpeg', 0.95);
-
-        const sufijo = imagenBaseIA ? '_ia_editada' : '_procesada';
+        const sufijo = canvasResultadoIA ? '_ia_editada' : '_procesada';
         const nuevoNombre = `${nombreBase}${sufijo}.jpg`;
         descargarArchivo(dataURL, nuevoNombre);
         mostrarNotificacion('Imagen descargada', 'success');
