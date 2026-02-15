@@ -4,6 +4,7 @@
 
 import { moduloEditor } from './modules/editor.js';
 import { moduloLote } from './modules/lote.js';
+import { moduloMockup } from './modules/mockup.js';
 
 export const router = {
     rutaActual: null,
@@ -35,6 +36,9 @@ export const router = {
                     break;
                 case 'lote':
                     await moduloLote.render(contenedor);
+                    break;
+                case 'mockup':
+                    await moduloMockup.render(contenedor);
                     break;
                 default:
                     await moduloEditor.render(contenedor);

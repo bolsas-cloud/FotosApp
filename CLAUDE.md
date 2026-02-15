@@ -34,6 +34,49 @@ Each module in `src/modules/` exports an object with a `render(contenedor)` meth
 |--------|---------------|
 | `editor.js` | Single photo editing: color picker, HSL sliders, brush tool (restore/apply), AI processing via Gemini, download |
 | `lote.js` | Batch processing: folder selection (File System Access API), automatic/assisted modes, reference image for tone consistency, ZIP download, rate limiting |
+| `mockup.js` | Photorealistic mockup generation: position logo on bag photos, dual AI provider (Gemini/OpenAI), zoom, multiple bags, batch generation |
+
+## Mockup Module
+
+### Overview
+Generates photorealistic mockups of logos/designs screen-printed on canvas tote bags using AI. Supports dual AI providers and multiple bag photos with independent logo positioning.
+
+### Key State
+- `bolsas[]` — Array of bag objects, each with: `{ imagen, dataURL, nombre, diseno: {x, y, ancho, alto, escala, rotacion}, resultadoIA }`
+- `bolsaActualIdx` — Index of currently selected bag in the editor
+- `imagenDiseno` / `imagenDisenoDataURL` — Single shared logo across all bags
+- `zoom` — Current zoom level (0.5x–5x), applied via CSS `transform: scale()`
+
+### Canvas Editor
+- HTML5 Canvas with drag-to-move, corner handles to resize (preserves aspect ratio), rotation slider
+- Zoom: mouse wheel (centered on cursor), +/- buttons, Ctrl+click pan
+- Handles and borders compensate for zoom (`lineWidth / zoom`) to maintain constant visual size
+
+### AI Generation Strategy
+Sends 3 images to the AI provider:
+1. **Clean bag photo** — texture context beneath the logo
+2. **Clean logo** — full detail for faithful reproduction
+3. **Composite** — bag + logo positioned, showing exact placement/size
+
+### Dual AI Providers
+
+**Gemini 3 Pro Image** (`gemini-3-pro-image-preview`):
+- REST API, JSON with base64 `inlineData`
+- Shares API key with Editor module (`fotosapp_gemini_key`)
+- `responseModalities: ['IMAGE', 'TEXT']`
+
+**OpenAI gpt-image** (`gpt-image-1`):
+- REST API, FormData multipart with `image[]` blobs
+- Independent API key (`fotosapp_openai_key`)
+- Quality: `medium` (default) or `high`
+
+### Batch Generation
+- "Generar todos" button appears when 2+ bags are loaded
+- Processes sequentially with 3-second delay between calls (rate limiting)
+- Progress bar tracks completion
+
+### Configuration
+Provider selection and API keys are managed via a config panel (gear icon), stored in `localStorage`.
 
 ## Image Processing Pipeline
 
@@ -96,6 +139,9 @@ Detects neutral/gray background pixels by checking:
 | `fotosapp_ultimo_color` | Last used color (hue, saturacion, colorHex) |
 | `fotosapp_mis_colores` | User's saved color palette (array of hex, max 8) |
 | `fotosapp_imagen_referencia` | Reference image base64 for batch tone consistency |
+| `fotosapp_mockup_proveedor` | Mockup AI provider: `'gemini'` or `'openai'` |
+| `fotosapp_openai_key` | OpenAI API key (mockup module) |
+| `fotosapp_openai_calidad` | OpenAI quality: `'medium'` or `'high'` |
 
 ## Language
 

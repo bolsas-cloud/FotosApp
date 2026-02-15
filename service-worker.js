@@ -16,7 +16,8 @@ const CACHE_ASSETS = [
     './src/utils.js',
     './src/lib/imageProcessor.js',
     './src/modules/editor.js',
-    './src/modules/lote.js'
+    './src/modules/lote.js',
+    './src/modules/mockup.js'
 ];
 
 // Instalación: cachear assets
