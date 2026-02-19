@@ -5,7 +5,7 @@
 
 // Configuración de la app
 export const APP_CONFIG = {
-    version: '1.0.0',
+    version: '2.0.0',
     nombre: 'FotosApp',
     maxFileSize: 10 * 1024 * 1024, // 10MB por archivo
     formatosPermitidos: ['image/jpeg', 'image/png', 'image/webp'],
