@@ -52,8 +52,19 @@ if (ultimoColor) {
     configLote.colorHex = ultimoColor.colorHex;
 }
 
-// API Key de Gemini
+// Proveedor de IA y API Keys
+let proveedorIA = localStorage.getItem('fotosapp_lote_proveedor') || 'gemini';
 let apiKeyGemini = localStorage.getItem('fotosapp_gemini_key') || '';
+let apiKeyOpenAI = localStorage.getItem('fotosapp_openai_key') || '';
+let calidadOpenAI = localStorage.getItem('fotosapp_openai_calidad') || 'medium';
+
+// Helper: base64 a Blob (para OpenAI FormData)
+function base64ABlob(base64, mimeType) {
+    const bytes = atob(base64);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return new Blob([arr], { type: mimeType });
+}
 
 export const moduloLote = {
     render: async (contenedor) => {
@@ -193,24 +204,57 @@ export const moduloLote = {
                             <summary class="text-gray-500 cursor-pointer hover:text-gray-700 p-1">
                                 <i class="fas fa-cog text-sm"></i>
                             </summary>
-                            <div class="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-20 w-[220px]">
-                                <p class="text-xs font-medium text-gray-700 mb-2">Tolerancia detección: <span id="valor-tolerancia">${configLote.toleranciaSaturacion}</span></p>
-                                <input type="range" id="slider-tol-lote" min="5" max="60" value="${configLote.toleranciaSaturacion}"
-                                    oninput="moduloLote.actualizarTolerancia(this.value)"
-                                    class="w-full mb-3">
-                                <p class="text-xs font-medium text-gray-700 mb-2">Calidad JPEG: <span id="valor-calidad">${Math.round(configLote.calidad * 100)}%</span></p>
-                                <input type="range" id="slider-cal-lote" min="70" max="100" value="${configLote.calidad * 100}"
-                                    oninput="moduloLote.actualizarCalidad(this.value)"
-                                    class="w-full mb-3">
-                                <p class="text-xs font-medium text-gray-700 mb-2">Delay IA (seg): <span id="valor-delay">${configLote.delayEntreImagenes / 1000}</span></p>
-                                <input type="range" id="slider-delay-lote" min="1" max="10" value="${configLote.delayEntreImagenes / 1000}"
-                                    oninput="moduloLote.actualizarDelay(this.value)"
-                                    class="w-full mb-3">
-                                <p class="text-xs font-medium text-gray-700 mb-2">API Key Gemini</p>
-                                <input type="password" id="input-api-lote" value="${apiKeyGemini}"
-                                    onchange="moduloLote.guardarApiKey(this.value)"
-                                    placeholder="AIza..."
-                                    class="w-full px-2 py-1 border border-gray-200 rounded text-xs">
+                            <div class="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-20 w-[260px]">
+                                <!-- Proveedor de IA -->
+                                <p class="text-xs font-medium text-gray-700 mb-1">Proveedor IA</p>
+                                <div class="flex gap-1 mb-3">
+                                    <button onclick="moduloLote.cambiarProveedor('gemini')" id="btn-prov-gemini"
+                                        class="flex-1 px-2 py-1 text-xs rounded transition-all ${proveedorIA === 'gemini' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
+                                        Gemini
+                                    </button>
+                                    <button onclick="moduloLote.cambiarProveedor('openai')" id="btn-prov-openai"
+                                        class="flex-1 px-2 py-1 text-xs rounded transition-all ${proveedorIA === 'openai' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
+                                        OpenAI
+                                    </button>
+                                </div>
+
+                                <!-- API Keys -->
+                                <div id="config-gemini" class="${proveedorIA === 'gemini' ? '' : 'hidden'}">
+                                    <p class="text-xs font-medium text-gray-700 mb-1">API Key Gemini</p>
+                                    <input type="password" id="input-api-gemini-lote" value="${apiKeyGemini}"
+                                        onchange="moduloLote.guardarApiKeyGemini(this.value)"
+                                        placeholder="AIza..."
+                                        class="w-full px-2 py-1 border border-gray-200 rounded text-xs mb-3">
+                                </div>
+                                <div id="config-openai" class="${proveedorIA === 'openai' ? '' : 'hidden'}">
+                                    <p class="text-xs font-medium text-gray-700 mb-1">API Key OpenAI</p>
+                                    <input type="password" id="input-api-openai-lote" value="${apiKeyOpenAI}"
+                                        onchange="moduloLote.guardarApiKeyOpenAI(this.value)"
+                                        placeholder="sk-..."
+                                        class="w-full px-2 py-1 border border-gray-200 rounded text-xs mb-2">
+                                    <p class="text-xs font-medium text-gray-700 mb-1">Calidad OpenAI</p>
+                                    <select id="select-calidad-openai" onchange="moduloLote.cambiarCalidadOpenAI(this.value)"
+                                        class="w-full px-2 py-1 border border-gray-200 rounded text-xs mb-3">
+                                        <option value="low" ${calidadOpenAI === 'low' ? 'selected' : ''}>Baja (~$0.01)</option>
+                                        <option value="medium" ${calidadOpenAI === 'medium' ? 'selected' : ''}>Media (~$0.03)</option>
+                                        <option value="high" ${calidadOpenAI === 'high' ? 'selected' : ''}>Alta (~$0.17)</option>
+                                    </select>
+                                </div>
+
+                                <div class="border-t border-gray-200 pt-2 mt-1">
+                                    <p class="text-xs font-medium text-gray-700 mb-2">Tolerancia detección: <span id="valor-tolerancia">${configLote.toleranciaSaturacion}</span></p>
+                                    <input type="range" id="slider-tol-lote" min="5" max="60" value="${configLote.toleranciaSaturacion}"
+                                        oninput="moduloLote.actualizarTolerancia(this.value)"
+                                        class="w-full mb-3">
+                                    <p class="text-xs font-medium text-gray-700 mb-2">Calidad JPEG: <span id="valor-calidad">${Math.round(configLote.calidad * 100)}%</span></p>
+                                    <input type="range" id="slider-cal-lote" min="70" max="100" value="${configLote.calidad * 100}"
+                                        oninput="moduloLote.actualizarCalidad(this.value)"
+                                        class="w-full mb-3">
+                                    <p class="text-xs font-medium text-gray-700 mb-2">Delay IA (seg): <span id="valor-delay">${configLote.delayEntreImagenes / 1000}</span></p>
+                                    <input type="range" id="slider-delay-lote" min="1" max="10" value="${configLote.delayEntreImagenes / 1000}"
+                                        oninput="moduloLote.actualizarDelay(this.value)"
+                                        class="w-full">
+                                </div>
                             </div>
                         </details>
 
@@ -435,10 +479,39 @@ export const moduloLote = {
         document.getElementById('input-hex-lote').value = configLote.colorHex;
     },
 
-    guardarApiKey: (key) => {
+    cambiarProveedor: (prov) => {
+        proveedorIA = prov;
+        localStorage.setItem('fotosapp_lote_proveedor', prov);
+        // Actualizar botones
+        document.getElementById('btn-prov-gemini')?.classList.toggle('bg-brand', prov === 'gemini');
+        document.getElementById('btn-prov-gemini')?.classList.toggle('text-white', prov === 'gemini');
+        document.getElementById('btn-prov-gemini')?.classList.toggle('bg-gray-100', prov !== 'gemini');
+        document.getElementById('btn-prov-gemini')?.classList.toggle('text-gray-600', prov !== 'gemini');
+        document.getElementById('btn-prov-openai')?.classList.toggle('bg-brand', prov === 'openai');
+        document.getElementById('btn-prov-openai')?.classList.toggle('text-white', prov === 'openai');
+        document.getElementById('btn-prov-openai')?.classList.toggle('bg-gray-100', prov !== 'openai');
+        document.getElementById('btn-prov-openai')?.classList.toggle('text-gray-600', prov !== 'openai');
+        // Mostrar/ocultar secciones de config
+        document.getElementById('config-gemini')?.classList.toggle('hidden', prov !== 'gemini');
+        document.getElementById('config-openai')?.classList.toggle('hidden', prov !== 'openai');
+        mostrarNotificacion(`Proveedor: ${prov === 'gemini' ? 'Gemini' : 'OpenAI'}`, 'info');
+    },
+
+    guardarApiKeyGemini: (key) => {
         apiKeyGemini = key;
         localStorage.setItem('fotosapp_gemini_key', key);
-        mostrarNotificacion('API Key guardada', 'success');
+        mostrarNotificacion('API Key Gemini guardada', 'success');
+    },
+
+    guardarApiKeyOpenAI: (key) => {
+        apiKeyOpenAI = key;
+        localStorage.setItem('fotosapp_openai_key', key);
+        mostrarNotificacion('API Key OpenAI guardada', 'success');
+    },
+
+    cambiarCalidadOpenAI: (valor) => {
+        calidadOpenAI = valor;
+        localStorage.setItem('fotosapp_openai_calidad', valor);
     },
 
     actualizarDelay: (valor) => {
@@ -917,11 +990,20 @@ export const moduloLote = {
     procesarImagen: async (item) => {
         const img = await cargarImagen(item.dataURL);
 
-        // Usar IA solo si está habilitada, hay API key, y no falló previamente
-        if (configLote.usarIA && apiKeyGemini && iaDisponible) {
+        if (!configLote.usarIA || !iaDisponible) {
+            return moduloLote.procesarLocal(img);
+        }
+
+        // Rutear al proveedor seleccionado
+        if (proveedorIA === 'openai' && apiKeyOpenAI) {
+            return await moduloLote.procesarConOpenAI(img, item);
+        } else if (proveedorIA === 'gemini' && apiKeyGemini) {
             return await moduloLote.procesarConIA(img, item);
         } else {
-            return moduloLote.procesarLocal(img);
+            const err = new Error('API Key no configurada');
+            err.esErrorIA = true;
+            err.mensajeUsuario = `Configura la API Key de ${proveedorIA === 'openai' ? 'OpenAI' : 'Gemini'} en el panel de ajustes.`;
+            throw err;
         }
     },
 
@@ -1093,6 +1175,126 @@ ABSOLUTE RULES — ZERO EXCEPTIONS:
             const err = new Error(error.message);
             err.esErrorIA = true;
             err.mensajeUsuario = 'Error de conexión con la IA. Verifica tu conexión a internet.';
+            throw err;
+        }
+    },
+
+    procesarConOpenAI: async (img, item) => {
+        document.getElementById('estado-actual').textContent = 'Procesando con OpenAI...';
+
+        try {
+            const canvas = document.createElement('canvas');
+            const maxSize = 1024;
+            let width = img.naturalWidth || img.width;
+            let height = img.naturalHeight || img.height;
+
+            if (width > maxSize || height > maxSize) {
+                const scale = maxSize / Math.max(width, height);
+                width = Math.round(width * scale);
+                height = Math.round(height * scale);
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+            const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+
+            // Construir prompt
+            let prompt;
+            if (usarImagenReferencia && imagenReferenciaBase64) {
+                prompt = `You are a product photo background color changer. Your ONLY job is to change the background tone/color.
+
+TASK: Match the background color of the product photo to the reference image's background.
+
+ABSOLUTE RULES — ZERO EXCEPTIONS:
+- The product/object must remain PIXEL-PERFECT IDENTICAL to the original
+- Do NOT alter the product's colors, shadows, reflections, texture, shape, edges, or ANY detail
+- Do NOT relight, enhance, smooth, sharpen, or "improve" the product in any way
+- Do NOT change the product's shadow on the background
+- ONLY recolor the flat background areas (the neutral/gray studio backdrop)
+- Keep the original background's natural lighting gradients and subtle texture variations, just shift the hue/tone
+- Output must have the exact same framing, resolution, and composition
+
+The first image is the reference (target background tone). The second image is the product photo to edit.`;
+            } else {
+                prompt = `You are a product photo background color changer. Your ONLY job is to change the background tone/color.
+
+TASK: Change the background color of this product photo to ${configLote.colorHex}.
+
+ABSOLUTE RULES — ZERO EXCEPTIONS:
+- The product/object must remain PIXEL-PERFECT IDENTICAL to the original
+- Do NOT alter the product's colors, shadows, reflections, texture, shape, edges, or ANY detail
+- Do NOT relight, enhance, smooth, sharpen, or "improve" the product in any way
+- Do NOT change the product's shadow on the background
+- ONLY recolor the flat background areas (the neutral/gray studio backdrop) to ${configLote.colorHex}
+- Keep the original background's natural lighting gradients and subtle texture variations, just shift the hue/tone to the target color
+- Output must have the exact same framing, resolution, and composition`;
+            }
+
+            // FormData con image[] para OpenAI
+            const formData = new FormData();
+            formData.append('model', 'gpt-image-1');
+            formData.append('prompt', prompt);
+
+            // Si hay referencia, enviarla como primera imagen
+            if (usarImagenReferencia && imagenReferenciaBase64) {
+                formData.append('image[]', base64ABlob(imagenReferenciaBase64, 'image/png'), 'reference.png');
+            }
+
+            formData.append('image[]', base64ABlob(base64, 'image/jpeg'), 'product.jpg');
+            formData.append('size', 'auto');
+            formData.append('quality', calidadOpenAI);
+
+            const response = await fetch('https://api.openai.com/v1/images/edits', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${apiKeyOpenAI}` },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const errorMsg = errorData.error?.message || `HTTP ${response.status}`;
+                console.warn('API OpenAI error:', errorMsg);
+
+                const esErrorTemporal = errorMsg.toLowerCase().includes('rate limit') ||
+                                        errorMsg.toLowerCase().includes('quota') ||
+                                        errorMsg.toLowerCase().includes('capacity') ||
+                                        response.status === 429 ||
+                                        response.status === 503;
+
+                iaDisponible = !esErrorTemporal;
+                const err = new Error(errorMsg);
+                err.esErrorIA = true;
+                err.mensajeUsuario = esErrorTemporal
+                    ? 'OpenAI no disponible (rate limit). Intenta más tarde.'
+                    : `Error OpenAI: ${errorMsg}`;
+                throw err;
+            }
+
+            const result = await response.json();
+            if (!result.data?.[0]?.b64_json) {
+                const err = new Error('OpenAI no generó una imagen');
+                err.esErrorIA = true;
+                err.mensajeUsuario = 'OpenAI no devolvió imagen. Intenta de nuevo.';
+                throw err;
+            }
+
+            const resultDataURL = `data:image/png;base64,${result.data[0].b64_json}`;
+
+            // Guardar como referencia si corresponde
+            if (usarImagenReferencia && !imagenReferenciaBase64) {
+                moduloLote.guardarReferencia(resultDataURL);
+            }
+
+            return resultDataURL;
+        } catch (error) {
+            if (error.esErrorIA) throw error;
+
+            console.warn('Error OpenAI (red):', error.message);
+            iaDisponible = false;
+            const err = new Error(error.message);
+            err.esErrorIA = true;
+            err.mensajeUsuario = 'Error de conexión con OpenAI. Verifica tu conexión a internet.';
             throw err;
         }
     },

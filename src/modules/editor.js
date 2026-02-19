@@ -25,9 +25,20 @@ let pintando = false;
 // Vista actual: 'dividida', 'original', 'procesada'
 let vistaActual = 'dividida';
 
-// API Key para IA
+// Proveedor de IA y API Keys
+let proveedorIA = localStorage.getItem('fotosapp_editor_proveedor') || 'gemini';
 let apiKeyGemini = localStorage.getItem('fotosapp_gemini_key') || '';
+let apiKeyOpenAI = localStorage.getItem('fotosapp_openai_key') || '';
+let calidadOpenAI = localStorage.getItem('fotosapp_openai_calidad') || 'medium';
 let procesandoIA = false;
+
+// Helper: base64 a Blob (para OpenAI FormData)
+function base64ABlob(base64, mimeType) {
+    const bytes = atob(base64);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    return new Blob([arr], { type: mimeType });
+}
 
 // Colores guardados por el usuario
 let misColores = JSON.parse(localStorage.getItem('fotosapp_mis_colores') || '[]');
@@ -248,10 +259,36 @@ export const moduloEditor = {
                                         onchange="moduloEditor.actualizarLuminosidad()"
                                         class="w-12 px-2 py-1 border border-gray-200 rounded text-xs text-center">
                                 </div>
-                                <p class="text-xs font-medium text-gray-700 mb-2">API Key Gemini</p>
-                                <input type="password" id="input-api-key" placeholder="AIza..."
-                                    onchange="moduloEditor.guardarApiKey(this.value)"
-                                    class="w-full px-2 py-1 border border-gray-200 rounded text-xs mb-3">
+                                <p class="text-xs font-medium text-gray-700 mb-1">Proveedor IA</p>
+                                <div class="flex gap-1 mb-2">
+                                    <button onclick="moduloEditor.cambiarProveedor('gemini')" id="btn-prov-gemini-ed"
+                                        class="flex-1 px-2 py-1 text-xs rounded transition-all ${proveedorIA === 'gemini' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
+                                        Gemini
+                                    </button>
+                                    <button onclick="moduloEditor.cambiarProveedor('openai')" id="btn-prov-openai-ed"
+                                        class="flex-1 px-2 py-1 text-xs rounded transition-all ${proveedorIA === 'openai' ? 'bg-brand text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}">
+                                        OpenAI
+                                    </button>
+                                </div>
+                                <div id="config-gemini-ed" class="${proveedorIA === 'gemini' ? '' : 'hidden'}">
+                                    <p class="text-xs text-gray-500 mb-1">API Key Gemini</p>
+                                    <input type="password" id="input-api-key" placeholder="AIza..."
+                                        onchange="moduloEditor.guardarApiKeyGemini(this.value)"
+                                        class="w-full px-2 py-1 border border-gray-200 rounded text-xs mb-2">
+                                </div>
+                                <div id="config-openai-ed" class="${proveedorIA === 'openai' ? '' : 'hidden'}">
+                                    <p class="text-xs text-gray-500 mb-1">API Key OpenAI</p>
+                                    <input type="password" id="input-api-key-openai" placeholder="sk-..."
+                                        onchange="moduloEditor.guardarApiKeyOpenAI(this.value)"
+                                        class="w-full px-2 py-1 border border-gray-200 rounded text-xs mb-2">
+                                    <p class="text-xs text-gray-500 mb-1">Calidad</p>
+                                    <select id="select-calidad-openai-ed" onchange="moduloEditor.cambiarCalidadOpenAI(this.value)"
+                                        class="w-full px-2 py-1 border border-gray-200 rounded text-xs mb-2">
+                                        <option value="low" ${calidadOpenAI === 'low' ? 'selected' : ''}>Baja</option>
+                                        <option value="medium" ${calidadOpenAI === 'medium' ? 'selected' : ''}>Media</option>
+                                        <option value="high" ${calidadOpenAI === 'high' ? 'selected' : ''}>Alta</option>
+                                    </select>
+                                </div>
                                 <button onclick="moduloEditor.resetearAjustes()" class="text-xs text-brand hover:underline">
                                     <i class="fas fa-undo mr-1"></i>Resetear ajustes
                                 </button>
@@ -418,11 +455,11 @@ export const moduloEditor = {
             }
         });
 
-        // Cargar API key guardada
+        // Cargar API keys guardadas
         const inputApiKey = document.getElementById('input-api-key');
-        if (inputApiKey && apiKeyGemini) {
-            inputApiKey.value = apiKeyGemini;
-        }
+        if (inputApiKey && apiKeyGemini) inputApiKey.value = apiKeyGemini;
+        const inputApiKeyOA = document.getElementById('input-api-key-openai');
+        if (inputApiKeyOA && apiKeyOpenAI) inputApiKeyOA.value = apiKeyOpenAI;
     },
 
     inicializarEventosPincel: () => {
@@ -878,10 +915,37 @@ export const moduloEditor = {
         if (display) display.textContent = hex;
     },
 
-    guardarApiKey: (key) => {
+    cambiarProveedor: (prov) => {
+        proveedorIA = prov;
+        localStorage.setItem('fotosapp_editor_proveedor', prov);
+        document.getElementById('btn-prov-gemini-ed')?.classList.toggle('bg-brand', prov === 'gemini');
+        document.getElementById('btn-prov-gemini-ed')?.classList.toggle('text-white', prov === 'gemini');
+        document.getElementById('btn-prov-gemini-ed')?.classList.toggle('bg-gray-100', prov !== 'gemini');
+        document.getElementById('btn-prov-gemini-ed')?.classList.toggle('text-gray-600', prov !== 'gemini');
+        document.getElementById('btn-prov-openai-ed')?.classList.toggle('bg-brand', prov === 'openai');
+        document.getElementById('btn-prov-openai-ed')?.classList.toggle('text-white', prov === 'openai');
+        document.getElementById('btn-prov-openai-ed')?.classList.toggle('bg-gray-100', prov !== 'openai');
+        document.getElementById('btn-prov-openai-ed')?.classList.toggle('text-gray-600', prov !== 'openai');
+        document.getElementById('config-gemini-ed')?.classList.toggle('hidden', prov !== 'gemini');
+        document.getElementById('config-openai-ed')?.classList.toggle('hidden', prov !== 'openai');
+        mostrarNotificacion(`Proveedor: ${prov === 'gemini' ? 'Gemini' : 'OpenAI'}`, 'info');
+    },
+
+    guardarApiKeyGemini: (key) => {
         apiKeyGemini = key;
         localStorage.setItem('fotosapp_gemini_key', key);
-        mostrarNotificacion('API Key guardada', 'success');
+        mostrarNotificacion('API Key Gemini guardada', 'success');
+    },
+
+    guardarApiKeyOpenAI: (key) => {
+        apiKeyOpenAI = key;
+        localStorage.setItem('fotosapp_openai_key', key);
+        mostrarNotificacion('API Key OpenAI guardada', 'success');
+    },
+
+    cambiarCalidadOpenAI: (valor) => {
+        calidadOpenAI = valor;
+        localStorage.setItem('fotosapp_openai_calidad', valor);
     },
 
     procesarConIA: async () => {
@@ -890,8 +954,10 @@ export const moduloEditor = {
             return;
         }
 
-        if (!apiKeyGemini) {
-            mostrarNotificacion('Configura tu API Key de Gemini en ⚙️', 'warning');
+        // Validar API key según proveedor
+        const apiKeyActiva = proveedorIA === 'openai' ? apiKeyOpenAI : apiKeyGemini;
+        if (!apiKeyActiva) {
+            mostrarNotificacion(`Configura tu API Key de ${proveedorIA === 'openai' ? 'OpenAI' : 'Gemini'} en ⚙️`, 'warning');
             return;
         }
 
@@ -928,20 +994,9 @@ export const moduloEditor = {
             }
 
             const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-
-            // Color destino en formato legible
-            const rgb = hslToRgb(configActual.hue, configActual.saturacion, 50);
             const colorDescripcion = configActual.colorHex;
 
-            // Llamar a Gemini 3 Pro Image (optimizado para edición de imágenes)
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${apiKeyGemini}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            {
-                                text: `You are a product photo background color changer. Your ONLY job is to change the background tone/color.
+            const promptIA = `You are a product photo background color changer. Your ONLY job is to change the background tone/color.
 
 TASK: Change the background color of this product photo to ${colorDescripcion}.
 
@@ -952,40 +1007,71 @@ ABSOLUTE RULES — ZERO EXCEPTIONS:
 - Do NOT change the product's shadow on the background
 - ONLY recolor the flat background areas (the neutral/gray studio backdrop) to ${colorDescripcion}
 - Keep the original background's natural lighting gradients and subtle texture variations, just shift the hue/tone to the target color
-- Output must have the exact same framing, resolution, and composition`
-                            },
-                            {
-                                inlineData: {
-                                    mimeType: 'image/jpeg',
-                                    data: base64
-                                }
-                            }
-                        ]
-                    }],
-                    generationConfig: {
-                        responseModalities: ['IMAGE', 'TEXT']
-                    }
-                })
-            });
+- Output must have the exact same framing, resolution, and composition`;
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error?.message || 'Error de API');
-            }
+            let imageData;
 
-            const result = await response.json();
+            if (proveedorIA === 'openai') {
+                // === OpenAI gpt-image ===
+                const formData = new FormData();
+                formData.append('model', 'gpt-image-1');
+                formData.append('prompt', promptIA);
+                formData.append('image[]', base64ABlob(base64, 'image/jpeg'), 'product.jpg');
+                formData.append('size', 'auto');
+                formData.append('quality', calidadOpenAI);
 
-            // Buscar imagen en la respuesta
-            let imageData = null;
-            for (const part of result.candidates?.[0]?.content?.parts || []) {
-                if (part.inlineData?.mimeType?.startsWith('image/')) {
-                    imageData = part.inlineData.data;
-                    break;
+                const response = await fetch('https://api.openai.com/v1/images/edits', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${apiKeyOpenAI}` },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.error?.message || `Error HTTP ${response.status}`);
                 }
-            }
 
-            if (!imageData) {
-                throw new Error('Gemini no generó una imagen. Intenta con otra foto.');
+                const result = await response.json();
+                if (!result.data?.[0]?.b64_json) {
+                    throw new Error('OpenAI no generó una imagen. Intenta de nuevo.');
+                }
+                imageData = result.data[0].b64_json;
+
+            } else {
+                // === Gemini 3 Pro Image ===
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${apiKeyGemini}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [
+                                { text: promptIA },
+                                { inlineData: { mimeType: 'image/jpeg', data: base64 } }
+                            ]
+                        }],
+                        generationConfig: {
+                            responseModalities: ['IMAGE', 'TEXT']
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.error?.message || 'Error de API');
+                }
+
+                const result = await response.json();
+                imageData = null;
+                for (const part of result.candidates?.[0]?.content?.parts || []) {
+                    if (part.inlineData?.mimeType?.startsWith('image/')) {
+                        imageData = part.inlineData.data;
+                        break;
+                    }
+                }
+
+                if (!imageData) {
+                    throw new Error('Gemini no generó una imagen. Intenta con otra foto.');
+                }
             }
 
             // Cargar imagen generada
