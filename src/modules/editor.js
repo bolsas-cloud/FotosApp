@@ -941,7 +941,18 @@ export const moduloEditor = {
                     contents: [{
                         parts: [
                             {
-                                text: `Edit this product photo: change ONLY the background color to ${colorDescripcion}. Keep the product exactly the same, only change the neutral/gray background to the specified color. Preserve all lighting and texture variations of the original background.`
+                                text: `You are a product photo background color changer. Your ONLY job is to change the background tone/color.
+
+TASK: Change the background color of this product photo to ${colorDescripcion}.
+
+ABSOLUTE RULES — ZERO EXCEPTIONS:
+- The product/object must remain PIXEL-PERFECT IDENTICAL to the original
+- Do NOT alter the product's colors, shadows, reflections, texture, shape, edges, or ANY detail
+- Do NOT relight, enhance, smooth, sharpen, or "improve" the product in any way
+- Do NOT change the product's shadow on the background
+- ONLY recolor the flat background areas (the neutral/gray studio backdrop) to ${colorDescripcion}
+- Keep the original background's natural lighting gradients and subtle texture variations, just shift the hue/tone to the target color
+- Output must have the exact same framing, resolution, and composition`
                             },
                             {
                                 inlineData: {

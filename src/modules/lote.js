@@ -811,6 +811,14 @@ export const moduloLote = {
                 console.error('Error procesando:', item.nombre, error);
                 item.estado = 'error';
                 estadisticas.errores++;
+
+                // Error de IA: detener el lote y avisar al usuario
+                if (error.esErrorIA) {
+                    mostrarNotificacion(error.mensajeUsuario || 'Error de IA. Procesamiento detenido.', 'error');
+                    moduloLote.actualizarCola();
+                    moduloLote.actualizarEstadisticas();
+                    break;
+                }
             }
 
             moduloLote.actualizarCola();
@@ -855,6 +863,15 @@ export const moduloLote = {
             item.estado = 'error';
             estadisticas.errores++;
             moduloLote.actualizarEstadisticas();
+            moduloLote.actualizarCola();
+
+            // Error de IA: detener y avisar
+            if (error.esErrorIA) {
+                mostrarNotificacion(error.mensajeUsuario || 'Error de IA. Procesamiento detenido.', 'error');
+                moduloLote.finalizarProcesamiento();
+                return;
+            }
+
             archivoActualIndex++;
             await moduloLote.procesarSiguienteAsistido();
         }
@@ -948,7 +965,20 @@ export const moduloLote = {
             // Si tenemos imagen de referencia, incluirla en el prompt
             if (usarImagenReferencia && imagenReferenciaBase64) {
                 parts.push({
-                    text: `I have a reference image showing the exact background tone I want. Edit the second product photo to match the background color and tone of the reference image EXACTLY. Keep the product the same, only change the background to match the reference. Preserve lighting and texture variations.`
+                    text: `You are a product photo background color changer. Your ONLY job is to change the background tone/color.
+
+TASK: Match the background color of the product photo to the reference image's background.
+
+ABSOLUTE RULES — ZERO EXCEPTIONS:
+- The product/object must remain PIXEL-PERFECT IDENTICAL to the original
+- Do NOT alter the product's colors, shadows, reflections, texture, shape, edges, or ANY detail
+- Do NOT relight, enhance, smooth, sharpen, or "improve" the product in any way
+- Do NOT change the product's shadow on the background
+- ONLY recolor the flat background areas (the neutral/gray studio backdrop)
+- Keep the original background's natural lighting gradients and subtle texture variations, just shift the hue/tone
+- Output must have the exact same framing, resolution, and composition
+
+Reference image (shows the target background tone):`
                 });
                 parts.push({
                     inlineData: {
@@ -957,7 +987,7 @@ export const moduloLote = {
                     }
                 });
                 parts.push({
-                    text: `Now edit this photo to match the reference background:`
+                    text: `Product photo to edit (change ONLY the background to match the reference):`
                 });
                 parts.push({
                     inlineData: {
@@ -968,7 +998,18 @@ export const moduloLote = {
             } else {
                 // Sin referencia, usar el color hex
                 parts.push({
-                    text: `Edit this product photo: change ONLY the background color to ${configLote.colorHex}. Keep the product exactly the same, only change the neutral/gray background to the specified color. Preserve all lighting and texture variations of the original background.`
+                    text: `You are a product photo background color changer. Your ONLY job is to change the background tone/color.
+
+TASK: Change the background color of this product photo to ${configLote.colorHex}.
+
+ABSOLUTE RULES — ZERO EXCEPTIONS:
+- The product/object must remain PIXEL-PERFECT IDENTICAL to the original
+- Do NOT alter the product's colors, shadows, reflections, texture, shape, edges, or ANY detail
+- Do NOT relight, enhance, smooth, sharpen, or "improve" the product in any way
+- Do NOT change the product's shadow on the background
+- ONLY recolor the flat background areas (the neutral/gray studio backdrop) to ${configLote.colorHex}
+- Keep the original background's natural lighting gradients and subtle texture variations, just shift the hue/tone to the target color
+- Output must have the exact same framing, resolution, and composition`
                 });
                 parts.push({
                     inlineData: {
@@ -992,9 +1033,30 @@ export const moduloLote = {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                console.warn('API Gemini error:', errorData.error?.message || response.status);
-                document.getElementById('estado-actual').textContent = 'IA no disponible, procesando local...';
-                return moduloLote.procesarLocal(img);
+                const errorMsg = errorData.error?.message || `HTTP ${response.status}`;
+                console.warn('API Gemini error:', errorMsg);
+
+                // Detectar errores temporales de disponibilidad
+                const esErrorTemporal = errorMsg.toLowerCase().includes('high demand') ||
+                                        errorMsg.toLowerCase().includes('rate limit') ||
+                                        errorMsg.toLowerCase().includes('quota') ||
+                                        errorMsg.toLowerCase().includes('overloaded') ||
+                                        response.status === 429 ||
+                                        response.status === 503;
+
+                if (esErrorTemporal) {
+                    iaDisponible = false;
+                    const err = new Error(errorMsg);
+                    err.esErrorIA = true;
+                    err.mensajeUsuario = 'La IA no está disponible en este momento (alta demanda). Intenta más tarde.';
+                    throw err;
+                }
+
+                // Otros errores HTTP (ej: API key inválida)
+                const err = new Error(errorMsg);
+                err.esErrorIA = true;
+                err.mensajeUsuario = `Error de IA: ${errorMsg}`;
+                throw err;
             }
 
             const result = await response.json();
@@ -1022,18 +1084,16 @@ export const moduloLote = {
 
             return resultDataURL;
         } catch (error) {
-            // CORS u otro error de red - fallback silencioso a procesamiento local
-            console.warn('Error IA (CORS/red), usando procesamiento local:', error.message);
+            // Si ya es un error de IA marcado, re-lanzar para que lo capture el procesador
+            if (error.esErrorIA) throw error;
 
-            // Marcar IA como no disponible y notificar una sola vez
+            // Error de red/CORS — marcar IA como no disponible y propagar
+            console.warn('Error IA (red):', error.message);
             iaDisponible = false;
-            if (!iaFallbackNotificado) {
-                iaFallbackNotificado = true;
-                mostrarNotificacion('IA no disponible (CORS). Usando procesamiento local.', 'warning');
-            }
-
-            document.getElementById('estado-actual').textContent = 'Procesando localmente...';
-            return moduloLote.procesarLocal(img);
+            const err = new Error(error.message);
+            err.esErrorIA = true;
+            err.mensajeUsuario = 'Error de conexión con la IA. Verifica tu conexión a internet.';
+            throw err;
         }
     },
 
